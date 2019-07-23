@@ -99,6 +99,12 @@ vbi1
         sta mdelay+1
         sta mdelay+2
         sta mdelay+3
+        sta m0active
+        sta m1active
+        sta m2active
+        sta m3active
+        lda #$02
+        sta mheight
         lda #$0a
         sta wind_dir
 ?exit   jmp jm_exit_vbi
@@ -114,13 +120,18 @@ vbi1
         bne ?nextmissile
 
         lda #MISSILE_R ; initialize missile X position to right side
+        lda #$50 ; initialize missile X position to right side
         sta m0x,x
         lda #$0
         sta m0xl,x
 
         lda p0y ; initialize missile Y position to almost the player position
         and #$f0
+        lda #$40
         sta m0y,x
+
+        lda #$1
+        sta m0active,x
 
 ?movemissile
         lda wind_dir
@@ -148,6 +159,8 @@ vbi1
         and #$5f
         ora #$40
         sta mdelay,x
+        lda #$0
+        sta m0active,x
 
 ?nextmissile
         dex
