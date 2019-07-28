@@ -74,6 +74,10 @@ jm_exit_vbi = $311b
 
 ; variables
 
+scratch = $80
+
+; constants
+
 MISSILE_L = $20
 MISSILE_R = $b0
 
@@ -84,13 +88,30 @@ MISSILE_R = $b0
 
 
 vbi1
-        lda jm_alive
-        cmp #2
-        beq ?exit ; if dead, exit
-        lda wind_dir
-        cmp #$00
-        bne ?cont ; already set up
-        lda #$00
+        lda jm_alive     ; check jumpman alive state
+        cmp #$02        ; dead with birdies?
+        bne cont1       ; nope, continue
+        lda level_init  ; yep, dead
+        cmp #$ff        ; is timer already reset?
+        beq exit1       ; yep, exit
+        lda #$ff        ; init timer
+        sta level_init
+        lda #0          ; move all missiles off screen
+        sta m0active
+        sta m0active+1
+        sta m0active+2
+        sta m0active+3
+        sta m0x
+        sta m0x+1
+        sta m0x+2
+        sta m0x+3
+exit1   jmp $311b
+cont1   lda level_init      ; check for first time init
+        cmp #$ff
+        bne cont2       ; nope
+
+        lda #0    ; yep, first time init
+        sta level_init
         sta m0xl
         sta m0xl+1
         sta m0xl+2
@@ -105,12 +126,12 @@ vbi1
         sta m3active
         lda #$02
         sta mheight
-        lda #$0a
+        lda #$ff
         sta wind_dir
-?exit   jmp jm_exit_vbi
+        bne exit1
 
 
-?cont
+cont2
         ldx #$03
 
 ?loop
@@ -127,7 +148,10 @@ vbi1
 
         lda p0y ; initialize missile Y position to almost the player position
         and #$f0
-        lda #$40
+        sta scratch
+        lda RANDOM
+        and #$0f
+        adc scratch ; don’t care about carry
         sta m0y,x
 
         lda #$1
@@ -165,11 +189,11 @@ vbi1
 ?nextmissile
         dex
         bpl ?loop
-        bmi ?exit
+        jmp jm_exit_vbi
 
 
 
-
+level_init .byte $ff ; $ff = needs init
 wind_dir .byte $00  ; 1 - 7f right; 80 - ff left
 m0xl   .byte $00, $00, $00, $00
 mdelay .byte $00, $00, $00, $00
