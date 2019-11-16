@@ -104,58 +104,51 @@ gameloop
         cmp #$00
         beq ?glexit
         lda vcount
-        sta wsync
 
         ; check if vcount is in layer 1 (between vcount1 and vcount2)
         cmp #vcount1
-        bcc ?glcont
-        cmp #vcount2
-        bne ?v3
+        bne ?v2
         ; set player location for band 1
-        lda roombax+0
-        sta hposp2
-        lda roombax+1
-        sta hposp3
-        bne ?glcont
+        lda #14
+        sta colbak
+        ldx #0
+        jsr moveplayers
+        jmp ?glcont
 
         ; check in layer 2 (between vcount2 and vcount3)
-?v3     cmp #vcount3
-        bne ?v4
+?v2     cmp #vcount2
+        bne ?v3
         ; set player location for band 2
-        lda roombax + 2
-        sta hposp2
-        lda roombax + 3
-        sta hposp3
-        bne ?glcont
+        ldx #2
+        stx colbak
+        jsr moveplayers
+        jmp ?glcont
 
         ; check in layer 3 (between vcount3 and vcount4)
-?v4     cmp #vcount4
-        bne ?v5
+?v3     cmp #vcount3
+        bne ?v4
         ; set player location for band 3
-        lda roombax + 4
-        sta hposp2
-        lda roombax + 5
-        sta hposp3
-        bne ?glcont
+        ldx #4
+        stx colbak
+        jsr moveplayers
+        jmp ?glcont
 
         ; check in layer 4 (between vcount4 and vcount5)
-?v5     cmp #vcount5
-        bne ?v6
+?v4     cmp #vcount4
+        bne ?v5
         ; set player location for band 4
-        lda roombax + 6
-        sta hposp2
-        lda roombax + 7
-        sta hposp3
-        bne ?glcont
+        ldx #6
+        stx colbak
+        jsr moveplayers
+        jmp ?glcont
 
         ; check in layer 5 (between vcount5 and vcount6)
-?v6     cmp #vcount6
+?v5     cmp #vcount5
         bne ?glcont
         ; set player location for band 5
-        lda roombax + 8
-        sta hposp2
-        lda roombax + 9
-        sta hposp3
+        ldx #8
+        stx colbak
+        jsr moveplayers
 
 ?glcont lda jmstatus
 ?gl2    cmp #$08
@@ -201,8 +194,53 @@ playerinit
         bpl ?copyloop
         rts
 
+; only move half the players every frame so it doesn't clog up the cycles
+; and cause the next vcount test to be missed
 moveplayers
+        lda roombacounter
+        and #1
+        bne ?p3
+        jsr moveplayer ; move p2, leave p3 where it is
+        lda roombax,x
+        sta hposp2
+        inx
+        lda roombax,x
+        sta hposp3
         rts
+?p3     lda roombax,x ; move p3, leave p2 where it is
+        sta hposp2
+        inx
+        jsr moveplayer
+        lda roombax,x
+        sta hposp3
+        rts
+moveplayer ; player number in x
+        clc
+        lda roombax,x
+        adc roombadx,x
+        sta roombax,x
+        cmp roombaminx,x
+        bcs ?max
+        lda #1
+        sta roombadx,x
+        bne ?cont
+?max    cmp roombamaxx,x
+        bcc ?cont
+        lda #$ff
+        sta roombadx,x
+?cont   inc roombaframe,x
+        lda roombaframe,x
+        cmp #3
+        bcc ?done
+        lda #1
+        sta roombaframe,x
+?done   
+;        rts
+
+        lda #<roomba1
+        sta src
+        lda #>roomba1
+        sta src+1
 
 copy_player_to_band
         lda roombadest,x
@@ -250,16 +288,23 @@ alive   lda $2800       ; yep, dead
         beq move        ; yep, move
         jsr playerinit
         lda #$ff
-        ;sta $2800
-move    jsr moveplayers
+        sta $2800
+move    inc roombacounter
+        lda p2x         ; restore original players for top of next frame
+        sta hposp2
+        lda p3x
+        sta hposp3
         jmp $311b
 
 roomba1 .byte $ff, $18, $18, $18, $18, $ff
 roomba2 .byte $aa, $24, $24, $24, $24, $aa
+roombacounter .byte 0
 
 ; band data, 2 roombas per band
 roombax .byte 100, 120, 80, 140, 60, 160, 70, 170, 60, 180
-roombadx .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+roombadx .byte 1, $ff, 1, $ff, 1, $ff, 1, $ff, 1, $ff
+roombaminx .byte 50, 140, 50, 140, 50, 140, 50, 140, 50, 140,
+roombamaxx .byte 110, 210, 110, 210, 110, 210, 110, 210, 110, 210, 
 roombay .byte band1, band1, band2, band2, band3, band3, band4, band4, band5, band5
 roombaframe .byte 2, 1, 1, 2, 2, 1, 1, 2, 2, 1
 roombadest .byte $66, $67, $66, $67, $66, $67, $66, $67, $66, $67
