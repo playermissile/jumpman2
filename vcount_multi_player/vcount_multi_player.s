@@ -306,8 +306,8 @@ roombacounter .byte 0
 ; band data, 2 roombas per band
 roombax .byte 100, 120, 80, 140, 60, 160, 70, 170, 60, 180
 roombadx .byte 1, $ff, 1, $ff, 1, $ff, 1, $ff, 1, $ff
-roombaminx .byte 50, 140, 50, 140, 50, 140, 50, 140, 50, 140,
-roombamaxx .byte 110, 210, 110, 210, 110, 210, 110, 210, 110, 210, 
+roombaminx .byte 60, 138, 60, 138, 60, 138, 60, 138, 60, 138,
+roombamaxx .byte 115, 190, 115, 190, 115, 190, 115, 190, 115, 190,
 roombay .byte band1, band1, band2, band2, band3, band3, band4, band4, band5, band5
 roombaframe .byte 2, 1, 1, 2, 2, 1, 1, 2, 2, 1
 roombadest .byte $66, $67, $66, $67, $66, $67, $66, $67, $66, $67
