@@ -110,7 +110,7 @@ gameloop
         cmp #vcount1
         bcc ?glcont
         cmp #vcount2
-        bcs ?v3
+        bne ?v3
         ; set player location for band 1
         lda roombax+0
         sta hposp2
@@ -120,7 +120,7 @@ gameloop
 
         ; check in layer 2 (between vcount2 and vcount3)
 ?v3     cmp #vcount3
-        bcs ?v4
+        bne ?v4
         ; set player location for band 2
         lda roombax + 2
         sta hposp2
@@ -130,7 +130,7 @@ gameloop
 
         ; check in layer 3 (between vcount3 and vcount4)
 ?v4     cmp #vcount4
-        bcs ?v5
+        bne ?v5
         ; set player location for band 3
         lda roombax + 4
         sta hposp2
@@ -140,7 +140,7 @@ gameloop
 
         ; check in layer 4 (between vcount4 and vcount5)
 ?v5     cmp #vcount5
-        bcs ?v6
+        bne ?v6
         ; set player location for band 4
         lda roombax + 6
         sta hposp2
@@ -150,7 +150,7 @@ gameloop
 
         ; check in layer 5 (between vcount5 and vcount6)
 ?v6     cmp #vcount6
-        bcs ?glcont
+        bne ?glcont
         ; set player location for band 5
         lda roombax + 8
         sta hposp2
@@ -186,6 +186,9 @@ playerinit
         lda #1
         sta p2active
         sta p3active
+        sta p3frame
+        lda #2
+        sta p2frame
         ;jsr testplayers_vertical
         lda #<roomba1
         sta src
@@ -208,6 +211,8 @@ copy_player_to_band
         sta ?loop_smc+1
         lda roombaframe,x
         tay
+        lda #0
+        dey ; frame numbers start at 1
         beq ?start
 ?frame  clc
         adc p2height
@@ -245,18 +250,16 @@ alive   lda $2800       ; yep, dead
         beq move        ; yep, move
         jsr playerinit
         lda #$ff
-        sta $2800
+        ;sta $2800
 move    jsr moveplayers
         jmp $311b
 
-roomba1 .byte $ff, $ff, $7e, $7e, $ff, $ff
-roomba2 .byte $7e, $7e, $ff, $ff, $7e, $7e
-
-savedata .ds 30
+roomba1 .byte $ff, $18, $18, $18, $18, $ff
+roomba2 .byte $aa, $24, $24, $24, $24, $aa
 
 ; band data, 2 roombas per band
 roombax .byte 100, 120, 80, 140, 60, 160, 70, 170, 60, 180
 roombadx .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 roombay .byte band1, band1, band2, band2, band3, band3, band4, band4, band5, band5
-roombaframe .byte 0, 1, 1, 0, 0, 1, 1, 0, 0, 1
+roombaframe .byte 2, 1, 1, 2, 2, 1, 1, 2, 2, 1
 roombadest .byte $66, $67, $66, $67, $66, $67, $66, $67, $66, $67
