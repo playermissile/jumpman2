@@ -108,9 +108,13 @@ gameloop
         ; check if vcount is in layer 1 (between vcount1 and vcount2)
         cmp #vcount1
         bne ?v2
-        ; set player location for band 1
+
+        ; do some housekeeping the first time through every frame
         lda #14
         sta colbak
+        inc roombacounter
+
+        ; set player location for band 1
         ldx #0
         jsr moveplayers
         jmp ?glcont
@@ -289,15 +293,14 @@ alive   lda $2800       ; yep, dead
         jsr playerinit
         lda #$ff
         sta $2800
-move    inc roombacounter
-        lda p2x         ; restore original players for top of next frame
+move    lda p2x         ; restore original players for top of next frame
         sta hposp2
         lda p3x
         sta hposp3
         jmp $311b
 
-roomba1 .byte $ff, $18, $18, $18, $18, $ff
-roomba2 .byte $aa, $24, $24, $24, $24, $aa
+roomba1 .byte $3c, $7e, $ff, $ff, $ff, $55
+roomba2 .byte $3c, $7e, $ff, $ff, $ff, $aa
 roombacounter .byte 0
 
 ; band data, 2 roombas per band
