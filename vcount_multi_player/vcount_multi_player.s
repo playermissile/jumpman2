@@ -10,6 +10,10 @@ hposp0 = $d000
 hposp1 = $d001
 hposp2 = $d002
 hposp3 = $d003
+colpm0 = $d012
+colpm1 = $d013
+colpm2 = $d014
+colpm3 = $d015
 colpf0 = $d016
 colpf1 = $d017
 colpf2 = $d018
@@ -20,6 +24,8 @@ wsync = $d40a
 vcount = $d40b
 
 ; jumpman level storage
+ls_player2_color = $282c
+ls_player3_color = $282d
 ls_coin_remain = $283e
 ls_jmp_out_of_lives = $283f
 ls_out_of_lives_ptr = $2840
@@ -103,6 +109,16 @@ gameloop
         lda ls_coin_remain
         cmp #$00
         beq ?glexit
+
+        ; till I find a better way to deal with the gameloop not running
+        ; during the jumpman respawn sequence at $49d0, just don't run
+        ; the vcount routine during that time. This causes players to be
+        ; duplicated at their x pos all the way down the screen, so the
+        ; vbi will set the players off screen during this time
+        lda jmalive     ; Till I find a better way to 
+        cmp #$02        ; dead with birdies?
+        beq ?glcont
+
         lda vcount
 
         ; check if vcount is in layer 1 (between vcount1 and vcount2)
@@ -110,7 +126,7 @@ gameloop
         bne ?v2
 
         ; do some housekeeping the first time through every frame
-        lda #14
+        lda #10
         sta colbak
         inc roombacounter
 
@@ -286,6 +302,9 @@ vbi1
         lda jmalive     ; check jumpman alive state
         cmp #$02        ; dead with birdies?
         bne alive       ; nope, continue
+        lda #0          ; the DLI won't run during jumpman respawn, so move
+        sta hposp2      ;  the real players off screen so they won't be
+        sta hposp3      ;  shown repeated at same xpos all down the screen
 exit1   jmp $311b
 alive   lda $2800       ; yep, dead
         cmp #$ff        ; is timer already reset?
@@ -297,6 +316,10 @@ move    lda p2x         ; restore original players for top of next frame
         sta hposp2
         lda p3x
         sta hposp3
+;        lda ls_player2_color
+;        sta colpm2
+;        lda ls_player3_color
+;        sta colpm3
         jmp $311b
 
 roomba1 .byte $3c, $7e, $ff, $ff, $ff, $55
