@@ -131,47 +131,29 @@ gameloop
         inc roombamoveindex
 
 ?glvcount
+        ; check the band index first before checking vcount, because VBI
+        ; can occur between instructions and if bandindex is reset during
+        ; VBI but the check happens like this:
+        ;   lda vcount
+        ;   cmp bandvcount,x
+        ; the VCOUNT may still be a large number from last frame but the
+        ; trigger vcount may have been reset
+        ldx bandindex
+        cpx #5
+        bcs ?glcont
+
+        ; check if we have passed the next vcount trigger line
         lda vcount
+        cmp bandvcount,x
+        bcc ?glcont
 
-        ; check if vcount is in layer 1 (between vcount1 and vcount2)
-        cmp #vcount1
-        bne ?v2
-
-        ; set player location for band 1
-        ldx #2
+        ; yep, the vcount we are interested in has occurred, so move the
+        ; players so they will be multiplexed to the correct location for
+        ; this band
+        lda bandroomba,x
+        tax
         jsr show_players_in_band
-        jmp ?glcont
-
-        ; check in layer 2 (between vcount2 and vcount3)
-?v2     cmp #vcount2
-        bne ?v3
-        ; set player location for band 2
-        ldx #4
-        jsr show_players_in_band
-        jmp ?glcont
-
-        ; check in layer 3 (between vcount3 and vcount4)
-?v3     cmp #vcount3
-        bne ?v4
-        ; set player location for band 3
-        ldx #6
-        jsr show_players_in_band
-        jmp ?glcont
-
-        ; check in layer 4 (between vcount4 and vcount5)
-?v4     cmp #vcount4
-        bne ?v5
-        ; set player location for band 4
-        ldx #8
-        jsr show_players_in_band
-        jmp ?glcont
-
-        ; check in layer 5 (between vcount5 and vcount6)
-?v5     cmp #vcount5
-        bne ?glcont
-        ; set player location for band 5
-        ldx #10
-        jsr show_players_in_band
+        inc bandindex
 
 ?glcont lda jmstatus
 ?gl2    cmp #$08
@@ -220,7 +202,7 @@ playerinit
         rts
 
 show_players_in_band
-        stx colbak
+        ;stx colbak  ; debug: set background color to see DLI scan line
         lda roombax,x
         sta hposp2
         inx
@@ -332,6 +314,7 @@ move    lda p2x         ; restore original players for top of next frame
         sta hposp3
 
         lda #0
+        sta bandindex   ; reset vcount pointer to first DLI
         sta roombamoveindex ; start next frame with first roomba
         inc roombagroupindex ; check and reset roomba group to 0, 1, or 2
         lda roombagroupindex
@@ -339,10 +322,6 @@ move    lda p2x         ; restore original players for top of next frame
         bcc ?1
         lda #0
         sta roombagroupindex
-;        lda ls_player2_color
-;        sta colpm2
-;        lda ls_player3_color
-;        sta colpm3
 ?1      jmp $311b
 
 roomba1 .byte $3c, $7e, $ff, $ff, $ff, $55
@@ -351,11 +330,15 @@ roombagroupindex .byte 0
 roombamoveindex .byte 0
 
 ; band data, 2 roombas per band, 3 groups
-roombax .byte 60, 180, 100, 120, 80, 146, 60, 160, 70, 170, 60, 180
+roombax .byte 80, 135, 100, 160, 60, 146, 75, 160, 100, 140, 60, 180
 roombadx .byte 1, $ff, 1, $ff, 1, $ff, 1, $ff, 1, $ff, 1, $ff
-roombaminx .byte 60, 138, 60, 138, 60, 146, 60, 138, 60, 138, 60, 138,
-roombamaxx .byte 115, 190, 115, 190, 100, 190, 111, 190, 115, 190, 115, 190,
+roombaminx .byte 60, 138, 60, 157, 60, 146, 60, 138, 60, 138, 60, 138,
+roombamaxx .byte 115, 190, 92, 190, 100, 190, 111, 190, 115, 190, 115, 190,
 roombay .byte 36, 36, band1, band1, band2, band2, band3, band3, band4, band4, band5, band5
 roombaframe .byte 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1
 roombagroup .byte 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2
 roombadest .byte $ff, $ff, $66, $67, $66, $67, $66, $67, $66, $67, $66, $67
+
+bandindex .byte 0
+bandroomba .byte 2, 4, 6, 8, 10
+bandvcount .byte vcount1, vcount2, vcount3, vcount4, vcount5, $ff
