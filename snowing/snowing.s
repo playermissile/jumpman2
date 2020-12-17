@@ -112,7 +112,13 @@ lives_left = $30f0
 getq2 = $41e0
 bangsnd = $4974
 
-; my vars
+; local constants
+top_vcount = 12
+bot_vcount = 80
+top_mmem = 20
+bot_mmem = 200
+
+; local vars
 
 
 
@@ -147,8 +153,8 @@ gameloop
 
 
 playerinit
-        ldx #10         ; 10 copies
-        ldy #$16        ; start at top of visible playfield
+        ldx #7         ; 10 copies
+        ldy #top_mmem   ; start at top of visible playfield
 ?1      jsr copy_snowflakes
         dex
         bpl ?1
@@ -176,6 +182,16 @@ copy_snowflakes
         rts
 
 
+; move snow down one line
+snow_fall
+        ldy #bot_mmem
+?1      lda jm_mmem,y
+        sta jm_mmem+1,y
+        dey
+        cpy #top_mmem-1
+        bcs ?1
+        rts
+
 vbi1
         lda jmalive     ; check jumpman alive state
         cmp #$02        ; dead with birdies?
@@ -192,7 +208,10 @@ alive   lda $2800       ; check if already initialized
         jsr playerinit
         lda #$ff        ; store already initialized flag
         sta $2800
-?step   lda snow0x      ; restore positions for top of next frame
+
+?step
+        jsr snow_fall
+        lda snow0x      ; restore positions for top of next frame
         sta hposm0
         lda snow1x
         sta hposm1
