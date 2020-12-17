@@ -119,7 +119,8 @@ top_mmem = 20
 bot_mmem = 200
 
 ; local vars
-
+start_y = $80
+next_y = $70
 
 
 gameloop
@@ -153,15 +154,19 @@ gameloop
 
 
 playerinit
-        ldx #7         ; 10 copies
         ldy #top_mmem   ; start at top of visible playfield
-?1      jsr copy_snowflakes
-        dex
-        bpl ?1
+        sty start_y
+?1      jsr copy_snowflakes8
+        cpy #bot_mmem
+        bcc ?1
+        lda #4
+        sta loop_count
+        lda #top_mmem
+        sta next_y
         rts
 
 
-copy_snowflakes
+copy_snowflakes8
         lda #$80
         sta jm_mmem,y
         lda #$20
@@ -177,19 +182,66 @@ copy_snowflakes
         sta jm_mmem+7,y
         clc
         tya
-        adc #20
+        adc #8
+        tay
+        rts
+
+
+copy_snowflakes12
+        lda #$80
+        sta jm_mmem,y
+        lda #$20
+        sta jm_mmem+3,y
+        lda #$08
+        sta jm_mmem+6,y
+        lda #$02
+        sta jm_mmem+9,y
+        lda #0
+        sta jm_mmem+1,y
+        sta jm_mmem+2,y
+        sta jm_mmem+4,y
+        sta jm_mmem+5,y
+        sta jm_mmem+7,y
+        sta jm_mmem+8,y
+        sta jm_mmem+10,y
+        sta jm_mmem+11,y
+        clc
+        tya
+        adc #12
         tay
         rts
 
 
 ; move snow down one line
 snow_fall
-        ldy #bot_mmem
+        ldy start_y
 ?1      lda jm_mmem,y
         sta jm_mmem+1,y
-        dey
-        cpy #top_mmem-1
-        bcs ?1
+        lda #0
+        sta jm_mmem,y
+        tya
+        clc
+        adc #8
+        ;adc #12
+        tay
+        cpy #bot_mmem
+        bcc ?1
+
+        ; reset start_y for next VBI loop to get next set of missiles
+        ldy start_y
+        iny
+        iny
+        ;iny
+        cpy #top_mmem+8
+        ;cpy #top_mmem+12
+        bcc ?2
+
+        ; through all 4 sets of missiles, need to move one scanline down
+        beq ?3          ; exactly top_mmem+8, next run needs to start at 1
+        ldy #top_mmem   ; must be top_mmem+9, i.e. odd, next run start at 0
+        bne ?2
+?3      ldy #top_mmem+1
+?2      sty start_y
         rts
 
 vbi1
@@ -211,7 +263,14 @@ alive   lda $2800       ; check if already initialized
 
 ?step
         jsr snow_fall
-        lda snow0x      ; restore positions for top of next frame
+
+        ; only move 1/4 of missiles per VBI
+        dec loop_count
+        bne ?1
+        lda #4
+        sta loop_count
+
+?1      lda snow0x      ; restore positions for top of next frame
         sta hposm0
         lda snow1x
         sta hposm1
@@ -220,7 +279,7 @@ alive   lda $2800       ; check if already initialized
         lda snow3x
         sta hposm3
 
-?1      jmp $311b
+        jmp $311b
 
 
 ; replace normal vbi4 with this one that ignores missile collisions,
@@ -240,3 +299,4 @@ snow0x .byte $a8+4
 snow1x .byte $80+4
 snow2x .byte $58+4
 snow3x .byte $30+4
+loop_count .byte 4
