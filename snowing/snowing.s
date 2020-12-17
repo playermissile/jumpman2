@@ -157,7 +157,7 @@ playerinit
         ldy #top_mmem   ; start at top of visible playfield
         sty start_y
 ?1      jsr copy_snowflakes8
-        cpy #bot_mmem
+        cpy #bot_mmem-8
         bcc ?1
         lda #4
         sta loop_count
