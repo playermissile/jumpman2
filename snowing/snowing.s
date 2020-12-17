@@ -45,11 +45,11 @@ ls_level_complete_ptr = $2844
 ; jumpman memory map
 
 jm_pmbase = $6000
-jm_mmem = $6300
-jm_p0mem = $6400
-jm_p1mem = $6500
-jm_p2mem = $6600
-jm_p3mem = $6700
+jm_pmbase_m = $6300
+jm_pmbase_p0 = $6400
+jm_pmbase_p1 = $6500
+jm_pmbase_p2 = $6600
+jm_pmbase_p3 = $6700
 
 ; scratch
 
@@ -168,18 +168,18 @@ playerinit
 
 copy_snowflakes8
         lda #$80
-        sta jm_mmem,y
+        sta jm_pmbase_m,y
         lda #$20
-        sta jm_mmem+2,y
+        sta jm_pmbase_m+2,y
         lda #$08
-        sta jm_mmem+4,y
+        sta jm_pmbase_m+4,y
         lda #$02
-        sta jm_mmem+6,y
+        sta jm_pmbase_m+6,y
         lda #0
-        sta jm_mmem+1,y
-        sta jm_mmem+3,y
-        sta jm_mmem+5,y
-        sta jm_mmem+7,y
+        sta jm_pmbase_m+1,y
+        sta jm_pmbase_m+3,y
+        sta jm_pmbase_m+5,y
+        sta jm_pmbase_m+7,y
         clc
         tya
         adc #8
@@ -189,22 +189,22 @@ copy_snowflakes8
 
 copy_snowflakes12
         lda #$80
-        sta jm_mmem,y
+        sta jm_pmbase_m,y
         lda #$20
-        sta jm_mmem+3,y
+        sta jm_pmbase_m+3,y
         lda #$08
-        sta jm_mmem+6,y
+        sta jm_pmbase_m+6,y
         lda #$02
-        sta jm_mmem+9,y
+        sta jm_pmbase_m+9,y
         lda #0
-        sta jm_mmem+1,y
-        sta jm_mmem+2,y
-        sta jm_mmem+4,y
-        sta jm_mmem+5,y
-        sta jm_mmem+7,y
-        sta jm_mmem+8,y
-        sta jm_mmem+10,y
-        sta jm_mmem+11,y
+        sta jm_pmbase_m+1,y
+        sta jm_pmbase_m+2,y
+        sta jm_pmbase_m+4,y
+        sta jm_pmbase_m+5,y
+        sta jm_pmbase_m+7,y
+        sta jm_pmbase_m+8,y
+        sta jm_pmbase_m+10,y
+        sta jm_pmbase_m+11,y
         clc
         tya
         adc #12
@@ -212,13 +212,15 @@ copy_snowflakes12
         rts
 
 
-; move snow down one line
+; move snow down one line, only one quarter of snowflakes every vbi.
+; after 8 times through this, there will be space to put a new snowflake
+; at the top of the screen
 snow_fall
         ldy start_y
-?1      lda jm_mmem,y
-        sta jm_mmem+1,y
+?1      lda jm_pmbase_m,y
+        sta jm_pmbase_m+1,y
         lda #0
-        sta jm_mmem,y
+        sta jm_pmbase_m,y
         tya
         clc
         adc #8
@@ -244,6 +246,21 @@ snow_fall
 ?2      sty start_y
         rts
 
+
+; put a new snowflake at the top
+new_snow
+        ldy #top_mmem
+        ldx next_snowflake
+        lda snowflakes,x
+        ;lda #$02
+        sta jm_pmbase_m,y
+        inx
+        txa
+        and #3
+        sta next_snowflake
+        rts
+
+
 vbi1
         lda jmalive     ; check jumpman alive state
         cmp #$02        ; dead with birdies?
@@ -267,8 +284,9 @@ alive   lda $2800       ; check if already initialized
         ; only move 1/4 of missiles per VBI
         dec loop_count
         bne ?1
-        lda #4
+        lda #8
         sta loop_count
+        jsr new_snow
 
 ?1      lda snow0x      ; restore positions for top of next frame
         sta hposm0
@@ -299,4 +317,6 @@ snow0x .byte $a8+4
 snow1x .byte $80+4
 snow2x .byte $58+4
 snow3x .byte $30+4
-loop_count .byte 4
+loop_count .byte 8
+next_snowflake .byte 0
+snowflakes .byte $02,$08,$20,$80
