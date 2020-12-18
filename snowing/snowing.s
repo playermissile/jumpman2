@@ -113,8 +113,8 @@ getq2 = $41e0
 bangsnd = $4974
 
 ; local constants
-top_vcount = 12
-bot_vcount = 80
+top_vcount = 10
+bot_vcount = 100
 top_mmem = 20
 bot_mmem = 200
 
@@ -140,7 +140,7 @@ gameloop
         beq ?gldone
 
 
-        ; main game loop logic goes here
+        jsr gamelogic   ; do level-specific game logic
 
 
 ?gldone lda jmstatus
@@ -153,16 +153,35 @@ gameloop
 ?glexit jmp (ls_level_complete_ptr)
 
 
+; level logic goes here. This is run between the main game screen scan lines,
+; once it's outside those lines it returns to the main game loop where normal
+; level processing resumes, checking for lives lost, etc.
+gamelogic
+        ; 1st 4 snowflakes hpos is set in VBI, that's the first 8 scan lines
+        ; equiv to 4 vcount.
+        lda vcount
+?1      cmp vcount
+        beq ?1
+        cmp #top_vcount+4
+        bcc ?done
+        cmp #bot_vcount
+        bcs ?done
+
+        ; ok, within region that vcount is going to alter missile positions
+        sta hposm0
+        jmp gamelogic
+?done   rts
+
+
+
 playerinit
         ldy #top_mmem   ; start at top of visible playfield
         sty start_y
-?1      jsr copy_snowflakes8
-        cpy #bot_mmem-8
+?1      jsr copy_snowflakes16
+        cpy #bot_mmem-16
         bcc ?1
-        lda #4
+        lda #16
         sta loop_count
-        lda #top_mmem
-        sta next_y
         rts
 
 
@@ -212,6 +231,38 @@ copy_snowflakes12
         rts
 
 
+
+copy_snowflakes16
+        lda #$80
+        sta jm_pmbase_m,y
+        lda #$20
+        sta jm_pmbase_m+4,y
+        lda #$08
+        sta jm_pmbase_m+8,y
+        lda #$02
+        sta jm_pmbase_m+12,y
+        lda #0
+        sta jm_pmbase_m+1,y
+        sta jm_pmbase_m+2,y
+        sta jm_pmbase_m+3,y
+        sta jm_pmbase_m+5,y
+        sta jm_pmbase_m+6,y
+        sta jm_pmbase_m+7,y
+        sta jm_pmbase_m+9,y
+        sta jm_pmbase_m+10,y
+        sta jm_pmbase_m+11,y
+        sta jm_pmbase_m+13,y
+        sta jm_pmbase_m+14,y
+        sta jm_pmbase_m+15,y
+        clc
+        tya
+        adc #16
+        tay
+        rts
+
+
+
+
 ; move snow down one line, only one quarter of snowflakes every vbi.
 ; after 8 times through this, there will be space to put a new snowflake
 ; at the top of the screen
@@ -223,8 +274,9 @@ snow_fall
         sta jm_pmbase_m,y
         tya
         clc
-        adc #8
+        ;adc #8
         ;adc #12
+        adc #16
         tay
         cpy #bot_mmem
         bcc ?1
@@ -233,17 +285,23 @@ snow_fall
         ldy start_y
         iny
         iny
+        iny
+        iny
+        tya
         ;iny
-        cpy #top_mmem+8
+        ;cpy #top_mmem+8
         ;cpy #top_mmem+12
+        cmp #top_mmem+16
         bcc ?2
 
         ; through all 4 sets of missiles, need to move one scanline down
-        beq ?3          ; exactly top_mmem+8, next run needs to start at 1
-        ldy #top_mmem   ; must be top_mmem+9, i.e. odd, next run start at 0
-        bne ?2
-?3      ldy #top_mmem+1
-?2      sty start_y
+        ; and repeat. 4 loops total to move stuff down in 4 groups
+        sec
+        sbc #15
+        cmp #top_mmem+4
+        bcc ?2
+        lda #top_mmem
+?2      sta start_y
         rts
 
 
@@ -284,7 +342,7 @@ alive   lda $2800       ; check if already initialized
         ; only move 1/4 of missiles per VBI
         dec loop_count
         bne ?1
-        lda #8
+        lda #16
         sta loop_count
         jsr new_snow
 
