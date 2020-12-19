@@ -113,6 +113,13 @@ lives_left = $30f0
 getq2 = $41e0
 bangsnd = $4974
 
+
+; 180 scan lines of snow, 16 scan lines per group of 4 missiles, so there
+; are 11 full groups plus a quarter group. At any one time, there are 45
+; snowflakes on screen.
+xpos_storage = jm_pmbase_p2
+id_storage = jm_pmbase_p3
+
 ; local constants
 top_vcount = 10
 bot_vcount = 100
@@ -169,14 +176,18 @@ gamelogic
         bcs ?done
 
         ; ok, within region that vcount is going to alter missile positions
-        sta hposm0
+        asl a
+        tay
+        lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
         jmp gamelogic
 ?done   rts
 
 
 levelinit
         jsr dliinit
-        jsr positioninit
         jsr missileinit
         rts
 
@@ -188,85 +199,7 @@ dliinit
 missileinit
         ldy #top_mmem   ; start at top of visible playfield
         sty start_y
-;?1      jsr copy_snowflakes16
-;        cpy #bot_mmem-16
-;        bcc ?1
         rts
-
-        ; create snowflakes from position list
-        sty index1      ; temp var for pmbase offset
-        ldy 0
-?1      lda midlist,y
-        tax
-        lda snowflakes,x
-        ldx index1
-        sta jm_pmbase_m,x
-        lda #0
-        inx
-        sta jm_pmbase_m,x
-        inx
-        sta jm_pmbase_m,x
-        inx
-        sta jm_pmbase_m,x
-        inx
-        stx index1
-        iny
-        cpy #45
-        bcc ?1
-        rts
-
-
-; create random start positions and id numbers in list
-positioninit
-        ldy #0
-        ldx #0
-?1      lda random
-        clc
-        adc snow0x,x
-        sta mxlist,y
-        sta mxlistcopy,y
-        txa
-        sta midlist,y
-        sta midlistcopy,y
-        and #3
-        tax
-        iny
-        cpy #45
-        bcc ?1
-        lda #0
-        sta mindex
-        rts
-
-
-
-copy_snowflakes16
-        lda #$80
-        sta jm_pmbase_m,y
-        lda #$20
-        sta jm_pmbase_m+4,y
-        lda #$08
-        sta jm_pmbase_m+8,y
-        lda #$02
-        sta jm_pmbase_m+12,y
-        lda #0
-        sta jm_pmbase_m+1,y
-        sta jm_pmbase_m+2,y
-        sta jm_pmbase_m+3,y
-        sta jm_pmbase_m+5,y
-        sta jm_pmbase_m+6,y
-        sta jm_pmbase_m+7,y
-        sta jm_pmbase_m+9,y
-        sta jm_pmbase_m+10,y
-        sta jm_pmbase_m+11,y
-        sta jm_pmbase_m+13,y
-        sta jm_pmbase_m+14,y
-        sta jm_pmbase_m+15,y
-        clc
-        tya
-        adc #16
-        tay
-        rts
-
 
 
 
@@ -277,6 +210,10 @@ snow_fall
         ldy start_y
 ?1      lda jm_pmbase_m,y
         sta jm_pmbase_m+1,y
+        lda xpos_storage,y
+        sta xpos_storage+1,y
+        lda id_storage,y
+        sta id_storage+1,y
         lda #0
         sta jm_pmbase_m,y
         tya
@@ -314,6 +251,12 @@ new_snow
         lda snowflakes,x
         ;lda #$02
         sta jm_pmbase_m,y
+        txa
+        sta id_storage,y
+        lda random
+        clc
+        adc snow0x,x
+        sta xpos_storage,y
         inx
         txa
         and #3
@@ -348,14 +291,14 @@ alive   lda $2800       ; check if already initialized
         sta loop_count
         jsr new_snow
 
-?1      lda snow0x      ; restore positions for top of next frame
-        sta hposm0
-        lda snow1x
-        sta hposm1
-        lda snow2x
-        sta hposm2
-        lda snow3x
-        sta hposm3
+?1      ldy #top_mmem   ; restore positions for top of next frame
+?2      lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
+        iny
+        cpy #top_mmem+16
+        bcc ?2
 
         jmp $311b
 
@@ -380,42 +323,3 @@ snow3x .byte $30+4
 loop_count .byte 8
 next_snowflake .byte 0
 snowflakes .byte $02,$08,$20,$80
-
-        *= $2e00
-
-; 180 scan lines of snow, 16 scan lines per group of 4 missiles, so there
-; are 11 full groups plus a quarter group. At any one time, there are 45
-; snowflakes on screen. Instead of a circular buffer, store two copies of
-; each value so don't have to check the index after every increment.
-; 
-; The value mindex points to the
-; snowflake at the top of the screen. As a new snowflake is inserted at the
-; top, mindex will be decremented as that snowflake falls lower. The current
-; index being processed is mvcount, reset to mindex + 4 at the VBI because the
-; VBI processes the first 4 missile positions.
-mindex  .byte 0
-mvcount .byte 0
-mxlist  .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0
-mxlistcopy .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0
-midlist .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0
-midlistcopy .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0,0,0,0
-        .byte 0,0,0,0,0
