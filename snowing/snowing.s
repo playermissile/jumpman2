@@ -1,6 +1,7 @@
         *= $2860
 
 ; os memory map
+vdslst = $200
 color0 = $2c4
 color1 = $2c5
 color2 = $2c6
@@ -173,61 +174,67 @@ gamelogic
 ?done   rts
 
 
+levelinit
+        jsr dliinit
+        jsr positioninit
+        jsr missileinit
+        rts
 
-playerinit
+
+dliinit
+        rts
+
+
+missileinit
         ldy #top_mmem   ; start at top of visible playfield
         sty start_y
-?1      jsr copy_snowflakes16
-        cpy #bot_mmem-16
+;?1      jsr copy_snowflakes16
+;        cpy #bot_mmem-16
+;        bcc ?1
+        rts
+
+        ; create snowflakes from position list
+        sty index1      ; temp var for pmbase offset
+        ldy 0
+?1      lda midlist,y
+        tax
+        lda snowflakes,x
+        ldx index1
+        sta jm_pmbase_m,x
+        lda #0
+        inx
+        sta jm_pmbase_m,x
+        inx
+        sta jm_pmbase_m,x
+        inx
+        sta jm_pmbase_m,x
+        inx
+        stx index1
+        iny
+        cpy #45
         bcc ?1
-        lda #16
-        sta loop_count
         rts
 
 
-copy_snowflakes8
-        lda #$80
-        sta jm_pmbase_m,y
-        lda #$20
-        sta jm_pmbase_m+2,y
-        lda #$08
-        sta jm_pmbase_m+4,y
-        lda #$02
-        sta jm_pmbase_m+6,y
-        lda #0
-        sta jm_pmbase_m+1,y
-        sta jm_pmbase_m+3,y
-        sta jm_pmbase_m+5,y
-        sta jm_pmbase_m+7,y
+; create random start positions and id numbers in list
+positioninit
+        ldy #0
+        ldx #0
+?1      lda random
         clc
-        tya
-        adc #8
-        tay
-        rts
-
-
-copy_snowflakes12
-        lda #$80
-        sta jm_pmbase_m,y
-        lda #$20
-        sta jm_pmbase_m+3,y
-        lda #$08
-        sta jm_pmbase_m+6,y
-        lda #$02
-        sta jm_pmbase_m+9,y
+        adc snow0x,x
+        sta mxlist,y
+        sta mxlistcopy,y
+        txa
+        sta midlist,y
+        sta midlistcopy,y
+        and #3
+        tax
+        iny
+        cpy #45
+        bcc ?1
         lda #0
-        sta jm_pmbase_m+1,y
-        sta jm_pmbase_m+2,y
-        sta jm_pmbase_m+4,y
-        sta jm_pmbase_m+5,y
-        sta jm_pmbase_m+7,y
-        sta jm_pmbase_m+8,y
-        sta jm_pmbase_m+10,y
-        sta jm_pmbase_m+11,y
-        clc
-        tya
-        adc #12
-        tay
+        sta mindex
         rts
 
 
@@ -274,8 +281,6 @@ snow_fall
         sta jm_pmbase_m,y
         tya
         clc
-        ;adc #8
-        ;adc #12
         adc #16
         tay
         cpy #bot_mmem
@@ -288,9 +293,6 @@ snow_fall
         iny
         iny
         tya
-        ;iny
-        ;cpy #top_mmem+8
-        ;cpy #top_mmem+12
         cmp #top_mmem+16
         bcc ?2
 
@@ -332,7 +334,7 @@ exit1   jmp $311b
 alive   lda $2800       ; check if already initialized
         cmp #$ff        ; already initialized = $ff
         beq ?step       ; yep, move
-        jsr playerinit
+        jsr levelinit
         lda #$ff        ; store already initialized flag
         sta $2800
 
@@ -378,3 +380,42 @@ snow3x .byte $30+4
 loop_count .byte 8
 next_snowflake .byte 0
 snowflakes .byte $02,$08,$20,$80
+
+        *= $2e00
+
+; 180 scan lines of snow, 16 scan lines per group of 4 missiles, so there
+; are 11 full groups plus a quarter group. At any one time, there are 45
+; snowflakes on screen. Instead of a circular buffer, store two copies of
+; each value so don't have to check the index after every increment.
+; 
+; The value mindex points to the
+; snowflake at the top of the screen. As a new snowflake is inserted at the
+; top, mindex will be decremented as that snowflake falls lower. The current
+; index being processed is mvcount, reset to mindex + 4 at the VBI because the
+; VBI processes the first 4 missile positions.
+mindex  .byte 0
+mvcount .byte 0
+mxlist  .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0
+mxlistcopy .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0
+midlist .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0
+midlistcopy .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0,0,0,0
+        .byte 0,0,0,0,0
