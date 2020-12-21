@@ -1,6 +1,8 @@
         *= $2860
 
 ; os memory map
+rtclok = $12 ; rtclok+2 is incremented every vblank
+vdslst = $200
 color0 = $2c4
 color1 = $2c5
 color2 = $2c6
@@ -10,6 +12,15 @@ hposp0 = $d000
 hposp1 = $d001
 hposp2 = $d002
 hposp3 = $d003
+hposm0 = $d004
+hposm1 = $d005
+hposm2 = $d006
+hposm3 = $d007
+sizep0 = $d008
+sizep1 = $d009
+sizep2 = $d00a
+sizep3 = $d00b
+sizem0 = $d00c
 colpm0 = $d012
 colpm1 = $d013
 colpm2 = $d014
@@ -17,11 +28,13 @@ colpm3 = $d015
 colpf0 = $d016
 colpf1 = $d017
 colpf2 = $d018
-colpf3 = $d019
+colpf3 = $d019 ; also color of 5th player
 colbak = $d01a
+prior = $d01b
 random = $d20a
 wsync = $d40a
 vcount = $d40b
+nmien = $d40e
 
 ; jumpman level storage
 ls_player2_color = $282c
@@ -33,6 +46,17 @@ ls_level_complete_ptr = $2844
 
 
 ; jumpman memory map
+
+gameplay_dl = $3c00
+jm_pmbase = $6000
+jm_pmbase_m = $6300
+jm_pmbase_p0 = $6400
+jm_pmbase_p1 = $6500
+jm_pmbase_p2 = $6600
+jm_pmbase_p3 = $6700
+
+; jumpman constants
+bot_vcount = 100
 
 ; scratch
 
@@ -68,15 +92,33 @@ p4x = $3069
 p4y = $306e
 p4frame = $3073
 
+; collisions
+jm_collide_m0pl = $3098
+jm_collide_m1pl = $3099
+jm_collide_m2pl = $309a
+jm_collide_m3pl = $309b
+
 ; bullets
 m0state = $30a2
+m1state = $30a3
+m2state = $30a4
+m3state = $30a5
 m0x = $30a6
+m1x = $30a7
+m2x = $30a8
+m3x = $30a9
 m0y = $30aa
+m1y = $30ab
+m2y = $30ac
+m3y = $30ad
 
 ; status
 jmalive = $30bd
 jmstatus = $30be
 lives_left = $30f0
+
+; subroutines
+
 getq2 = $41e0
 bangsnd = $4974
 
@@ -87,24 +129,23 @@ gunstepinit = 6
 mindelay = 3 * gunstepinit
 gundata = $2e00
 
-; actual players are on the top level, copies are below
-vcount1 = 24
-vcount2 = 40
-vcount3 = 56
-vcount4 = 72
-vcount5 = 88
-vcount6 = 104
-
-; for 6 pixel height
+; my constants
 roomba_height = roomba2 - roomba1
-band1 = (2*vcount2) - 12
-band2 = (2*vcount3) - 12
-band3 = (2*vcount4) - 12
-band4 = (2*vcount5) - 12
-band5 = (2*vcount6) - 12
 
+
+; gameloop is called for every new life, not just the first time the level
+; scrolls into view.
 gameloop
         jsr $49d0
+
+        lda $2800       ; check DLI init flag to see if one-time level init
+        cmp #$ff        ; stuff has already been run
+        beq ?gl1
+        jsr playerinit
+        jsr dliinit
+        lda #$ff        ; store flag indicating DLI is ready to go
+        sta $2800
+
 ?gl1    jsr $4b00
         lda ls_coin_remain
         cmp #$00
@@ -125,35 +166,10 @@ gameloop
         ; a few scan lines we will stay ahead of the vcount bands.
         ldx roombamoveindex
         cpx #(roombadx - roombax) ; number of roombas
-        bcs ?glvcount   ; skip movement until next VBI
+        bcs ?glcont     ; skip movement until next VBI
 
         jsr moveplayer
         inc roombamoveindex
-
-?glvcount
-        ; check the band index first before checking vcount, because VBI
-        ; can occur between instructions and if bandindex is reset during
-        ; VBI but the check happens like this:
-        ;   lda vcount
-        ;   cmp bandvcount,x
-        ; the VCOUNT may still be a large number from last frame but the
-        ; trigger vcount may have been reset
-        ldx bandindex
-        cpx #5
-        bcs ?glcont
-
-        ; check if we have passed the next vcount trigger line
-        lda vcount
-        cmp bandvcount,x
-        bcc ?glcont
-
-        ; yep, the vcount we are interested in has occurred, so move the
-        ; players so they will be multiplexed to the correct location for
-        ; this band
-        lda bandroomba,x
-        tax
-        jsr show_players_in_band
-        inc bandindex
 
 ?glcont lda jmstatus
 ?gl2    cmp #$08
@@ -161,8 +177,11 @@ gameloop
         lda lives_left
         cmp #$ff
         bne gameloop
+        jsr dlicleanup
         jmp ls_jmp_out_of_lives
-?glexit jmp (ls_level_complete_ptr)
+?glexit jsr dlicleanup
+        jmp (ls_level_complete_ptr)
+
 
 playerinit
         lda #<roomba1
@@ -174,12 +193,11 @@ playerinit
         lda #(roomba2 - roomba1)
         sta p2height
         sta p3height
-        lda roombax
-        sta p2x
-        lda roombax+1
-        sta p3x
-        lda roombay
-        sta p2y
+        lda 0           ; initialize actual players offscreen
+        sta p2x         ; multiplexed players will not be positioned until
+        sta p3x         ; VBI starts
+        lda roombay     ; actual players occupy top platform
+        sta p2y         ; multiplexed players will be on lower platforms
         lda roombay+1
         sta p3y
         lda #1
@@ -189,26 +207,116 @@ playerinit
         sta p2frame
         lda roombaframe+1
         sta p2frame
-        ;jsr testplayers_vertical
-        lda #<roomba1
-        sta src
-        lda #>roomba1
-        sta src+1
-        ldx #9
-?copyloop
-        jsr fast_copy_player_to_band
-        dex
-        bpl ?copyloop
         rts
 
-show_players_in_band
-        ;stx colbak  ; debug: set background color to see DLI scan line
+
+; Set up new display list and DLI. Since we are doing this outside
+; of the VBI, we have to wait until the vblank is just passed and make
+; the changes while the DLIs are turned off.
+dliinit
+        lda rtclok+2
+?1      cmp rtclok+2    ; wait till next tick, indicating VBI has just happened
+        bne ?1
+        lda #$40        ; disable DLI
+        sta nmien
+        ldx #<dli_line_list
+        ldy #>dli_line_list
+        jsr custom_dli
+        lda #<dli
+        sta vdslst
+        lda #>dli
+        sta vdslst+1
+
+        ; don't know how long this has taken, so do the wait thing again
+        lda rtclok+2
+?2      cmp rtclok+2
+        bne ?2
+        lda #$c0        ; reenable DLI
+        sta nmien
+        rts
+
+; Alter the gameplay display list to add DLIs on the specified mode lines.
+; Note that there are 87 lines of ANTIC mode D in the display list. Indexes
+; start at zero for the first mode D line and go through 86 for the bottom
+; line. Anything outside this range will end the processing.
+
+custom_dli
+        stx ?smc_loop+1
+        sty ?smc_loop+2
+        ldx #0
+?smc_loop
+        lda $ffff,x
+        cmp #87
+        bcs ?exit
+        tay
+        beq ?1          ; don't adjust for LMS bytes if first line
+        iny
+        iny
+?1      lda gameplay_dl+3,y ; +3 to skip the 3x8 blank lines at the top
+        ora #$80
+        sta gameplay_dl+3,y
+        inx
+        bne ?smc_loop
+?exit   rts
+
+
+; restore original display list and DLI
+dlicleanup
+        lda rtclok+2
+?1      cmp rtclok+2    ; wait till next tick, indicating VBI has just happened
+        bne ?1
+        lda #$40        ; disable DLI
+        sta nmien
+
+        lda #$4d        ; restore LMS instruction on first display list line
+        sta gameplay_dl+3
+        lda #$0d
+        ldy #85
+?11     sta gameplay_dl+3,y
+        dey
+        bpl ?11
+
+        lda #$65        ; restore default gameplay DLI
+        sta vdslst
+        lda #$3c
+        sta vdslst+1
+
+        ; don't know how long this has taken, so do the wait thing again
+        lda rtclok+2
+?2      cmp rtclok+2
+        bne ?2
+        lda #$c0        ; reenable DLI
+        sta nmien
+        rts
+
+
+dli
+        pha
+        lda vcount
+        cmp #bot_vcount
+        bcc ?1
+        jmp $3c66       ; jump into normal DLI one instruction after PHA
+?1      ;sta colbak
+        txa
+        pha
+
+        ldx bandindex
+
+        ; Move the players so they will be multiplexed to the correct
+        ; location for this band
+        lda bandroomba,x
+        tax
         lda roombax,x
         sta hposp2
         inx
         lda roombax,x
         sta hposp3
-        rts
+        inc bandindex
+        pla
+        tax
+        pla
+        rti
+
 
 ; move a third of the players every frame to reduce speed of roombas
 moveplayer ; player number in x
@@ -252,27 +360,34 @@ moveplayer ; player number in x
 ?exit
         rts
 
+
+; multiplexed copies of players must handle their own image updates rather
+; than use the jumpman convenience functions.
 copy_player_to_band
         lda #<roomba1
         sta src
         lda #>roomba1
         sta src+1
-
-fast_copy_player_to_band
         lda roombadest,x
         sta ?loop_smc+2
         lda roombay,x
         sta ?loop_smc+1
+
+        ; adjust src to point to correct frame number. Note that frame
+        ; numbers start from 1 because the jumpman player/missile convenience
+        ; functions start from 1.
         lda roombaframe,x
         tay
         lda #0
-        dey ; frame numbers start at 1
+        dey
         beq ?start
 ?frame  clc
         adc p2height
         dey
         bne ?frame
         tay
+
+        ; copy routine starts here
 ?start  lda p2height
         sta index1
 ?loop   lda (src),y
@@ -283,35 +398,23 @@ fast_copy_player_to_band
         bne ?loop
         rts
 
-testplayers_vertical
-        lda #$ff
-        sta $2800
-        tay
-        iny
-?loop   sta $6600,y
-        sta $6700,y
-        iny
-        bne ?loop
-        rts
 
 vbi1
-        lda jmalive     ; check jumpman alive state
-        cmp #$02        ; dead with birdies?
-        bne alive       ; nope, continue
-        lda #0          ; the DLI won't run during jumpman respawn, so move
-        sta hposp2      ;  the real players off screen so they won't be
-        sta hposp3      ;  shown repeated at same xpos all down the screen
-exit1   jmp $311b
-alive   lda $2800       ; yep, dead
-        cmp #$ff        ; is timer already reset?
-        beq move        ; yep, move
-        jsr playerinit
-        lda #$ff
-        sta $2800
-move    lda p2x         ; restore original players for top of next frame
-        sta hposp2
-        lda p3x
-        sta hposp3
+        lda #<dli       ; point to our DLI again because it always gets
+        sta vdslst      ; wiped out by Jumpman DLI #3 at $3c9a
+        lda #>dli
+        sta vdslst+1
+
+        lda $2800       ; check to see if DLI has been enabled
+        cmp #$ff        ; before placing players
+        beq ?show
+        ldx #0
+        ldy #0
+        beq ?store
+?show   ldx p2x
+        ldy p3x
+?store  stx hposp2      ; restore original players for top of next frame
+        sty hposp3
 
         lda #0
         sta bandindex   ; reset vcount pointer to first DLI
@@ -332,13 +435,17 @@ roombamoveindex .byte 0
 ; band data, 2 roombas per band, 3 groups
 roombax .byte 80, 135, 100, 160, 60, 146, 75, 160, 100, 140, 60, 180
 roombadx .byte 1, $ff, 1, $ff, 1, $ff, 1, $ff, 1, $ff, 1, $ff
+
+; x coord min and max values in color clock position
 roombaminx .byte 60, 138, 60, 157, 60, 146, 60, 138, 60, 138, 60, 138,
 roombamaxx .byte 115, 190, 92, 190, 100, 190, 111, 190, 115, 190, 115, 190,
-roombay .byte 36, 36, band1, band1, band2, band2, band3, band3, band4, band4, band5, band5
+
+; y positions in scan line number
+roombay .byte 36, 36, 68, 68, 100, 100, 132, 132, 164, 164, 196, 196
 roombaframe .byte 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1
 roombagroup .byte 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2
 roombadest .byte $ff, $ff, $66, $67, $66, $67, $66, $67, $66, $67, $66, $67
 
 bandindex .byte 0
 bandroomba .byte 2, 4, 6, 8, 10
-bandvcount .byte vcount1, vcount2, vcount3, vcount4, vcount5, $ff
+dli_line_list .byte 8,$18,$28,$38,$48,$ff
