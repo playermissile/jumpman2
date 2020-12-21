@@ -1,6 +1,7 @@
         *= $2860
 
 ; os memory map
+rtclok = $12 ; rtclok+2 is incremented every vblank
 vdslst = $200
 color0 = $2c4
 color1 = $2c5
@@ -33,6 +34,7 @@ prior = $d01b
 random = $d20a
 wsync = $d40a
 vcount = $d40b
+nmien = $d40e
 
 ; jumpman level storage
 ls_player2_color = $282c
@@ -45,6 +47,7 @@ ls_level_complete_ptr = $2844
 
 ; jumpman memory map
 
+gameplay_dl = $3c00
 jm_pmbase = $6000
 jm_pmbase_m = $6300
 jm_pmbase_p0 = $6400
@@ -110,6 +113,9 @@ m3y = $30ad
 jmalive = $30bd
 jmstatus = $30be
 lives_left = $30f0
+
+; subroutines
+
 getq2 = $41e0
 bangsnd = $4974
 
@@ -133,22 +139,15 @@ next_y = $70
 
 gameloop
         jsr $49d0
+
+        jsr dliinit
+
 ?gl1    jsr $4b00
         lda ls_coin_remain
         cmp #$00
         beq ?glexit
 
-        ; till I find a better way to deal with the gameloop not running
-        ; during the jumpman respawn sequence at $49d0, just don't run
-        ; the vcount routine during that time. This causes players to be
-        ; duplicated at their x pos all the way down the screen, so the
-        ; vbi will set the players off screen during this time
-        lda jmalive     ; Till I find a better way to 
-        cmp #$02        ; dead with birdies?
-        beq ?gldone
-
-
-        jsr gamelogic   ; do level-specific game logic
+;        jsr gamelogic   ; do level-specific game logic
 
 
 ?gldone lda jmstatus
@@ -160,7 +159,7 @@ gameloop
         jmp ls_jmp_out_of_lives
 ?glexit jmp (ls_level_complete_ptr)
 
-
+        rts
 ; level logic goes here. This is run between the main game screen scan lines,
 ; once it's outside those lines it returns to the main game loop where normal
 ; level processing resumes, checking for lives lost, etc.
@@ -187,13 +186,127 @@ gamelogic
 
 
 levelinit
-        jsr dliinit
+        ;jsr dliinit
         jsr missileinit
         rts
 
 
+; Set up new display list and DLI. Since we are doing this outside
+; of the VBI, we have to wait until the vblank is just passed and make
+; the changes while the DLIs are turned off.
 dliinit
+        lda rtclok+2
+?1      cmp rtclok+2    ; wait till next tick, indicating VBI has just happened
+        bne ?1
+        lda #$40        ; disable DLI
+        sta nmien
+        ldx #<dli_line_list
+        ldy #>dli_line_list
+        jsr custom_dli
+        lda #<dli
+        sta vdslst
+        lda #>dli
+        sta vdslst+1
+
+        ; don't know how long this has taken, so do the wait thing again
+        lda rtclok+2
+?2      cmp rtclok+2
+        bne ?2
+        lda #$c0        ; reenable DLI
+        sta nmien
         rts
+
+; Alter the gameplay display list to add DLIs on the specified mode lines.
+; Note that there are 87 lines of ANTIC mode D in the display list. Indexes
+; start at zero for the first mode D line and go through 86 for the bottom
+; line. Anything outside this range will end the processing.
+
+custom_dli
+        stx ?smc_loop+1
+        sty ?smc_loop+2
+        ldx #0
+?smc_loop
+        lda $ffff,x
+        cmp #87
+        bcs ?exit
+        tay
+        beq ?1          ; don't adjust for LMS bytes if first line
+        iny
+        iny
+?1      lda gameplay_dl+3,y ; +3 to skip the 3x8 blank lines at the top
+        ora #$80
+        sta gameplay_dl+3,y
+        inx
+        bne ?smc_loop
+?exit   rts
+
+
+dlirestore
+        lda rtclok+2
+?1      cmp rtclok+2    ; wait till next tick, indicating VBI has just happened
+        bne ?1
+        lda #$40        ; disable DLI
+        sta nmien
+
+        lda #$4d        ; restore LMS instruction on first display list line
+        sta gameplay_dl+3
+        lda #$0d
+        ldy #85
+?11     sta gameplay_dl+3,y
+        dey
+        bpl ?11
+
+        ; don't know how long this has taken, so do the wait thing again
+        lda rtclok+2
+?2      cmp rtclok+2
+        bne ?2
+        lda #$c0        ; reenable DLI
+        sta nmien
+        rts
+
+
+
+dli
+        pha
+        lda vcount
+        cmp #bot_vcount
+        bcc ?1
+        jmp $3c66       ; jump into normal DLI one instruction after PHA
+?1      tya
+        pha
+        txa
+        pha
+        asl a
+        tay
+        ; position 4 missiles (next 16 scan lines)
+        lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
+        iny
+        iny
+        lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
+        iny
+        iny
+        lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
+        iny
+        iny
+        lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
+        pla
+        tax
+        pla
+        tay
+        pla
+        rti
 
 
 missileinit
@@ -265,16 +378,12 @@ new_snow
 
 
 vbi1
-        lda jmalive     ; check jumpman alive state
-        cmp #$02        ; dead with birdies?
-        bne alive       ; nope, continue
-        lda #0          ; the DLI won't run during jumpman respawn, so move
-        sta hposm0      ;  the real players off screen so they won't be
-        sta hposm1      ;  shown repeated at same xpos all down the screen
-        sta hposm2
-        sta hposm3
-exit1   jmp $311b
-alive   lda $2800       ; check if already initialized
+        lda #<dli       ; point to our DLI again
+        sta vdslst
+        lda #>dli
+        sta vdslst+1
+
+        lda $2800       ; check if already initialized
         cmp #$ff        ; already initialized = $ff
         beq ?step       ; yep, move
         jsr levelinit
@@ -323,3 +432,4 @@ snow3x .byte $30+4
 loop_count .byte 8
 next_snowflake .byte 0
 snowflakes .byte $02,$08,$20,$80
+dli_line_list .byte 0,8,16,24,32,40,48,56,64,72,80
