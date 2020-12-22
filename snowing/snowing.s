@@ -132,7 +132,8 @@ bot_mmem = 200
 
 ; local vars
 start_y = $80
-next_y = $70
+next_snowflake = $81
+loop_count = $70
 
 
 gameloop
@@ -157,8 +158,7 @@ gameloop
 
 
 levelinit
-        ;jsr dliinit
-        jsr missileinit
+        jsr snow_init
         lda #100
         sta hposp2
         lda #108
@@ -292,9 +292,13 @@ nextalt sta dliscratch
         rts
 
 
-missileinit
-        ldy #top_mmem   ; start at top of visible playfield
-        sty start_y
+snow_init
+        lda #top_mmem   ; start at top of visible playfield
+        sta start_y
+        lda #16
+        sta loop_count
+        lda #0
+        sta next_snowflake
         rts
 
 
@@ -406,7 +410,5 @@ snow0x .byte $a8+4
 snow1x .byte $80+4
 snow2x .byte $58+4
 snow3x .byte $30+4
-loop_count .byte 8
-next_snowflake .byte 0
 snowflakes .byte $02,$08,$20,$80
 dli_line_list .byte 0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,$ff
