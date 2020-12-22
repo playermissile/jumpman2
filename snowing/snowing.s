@@ -159,10 +159,12 @@ gameloop
 
 levelinit
         jsr snow_init
-        lda #100
-        sta hposp2
-        lda #108
-        sta hposp3
+
+        ; show player 2 and 3 data for debugging
+;        lda #100
+;        sta hposp2
+;        lda #108
+;        sta hposp3
         rts
 
 
@@ -253,7 +255,7 @@ dli
         cmp #bot_vcount
         bcc ?1
         jmp $3c66       ; jump into normal DLI one instruction after PHA
-?1      sta colbak
+?1      ;sta colbak      ; change background color for debugging
         tya
         pha
         txa
