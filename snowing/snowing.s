@@ -297,7 +297,7 @@ nextalt sta dliscratch
 snow_init
         lda #top_mmem   ; start at top of visible playfield
         sta start_y
-        lda #16
+        lda #32
         sta loop_count
         lda #0
         sta next_snowflake
