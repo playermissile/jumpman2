@@ -120,16 +120,14 @@ getq2 = $41e0
 bangsnd = $4974
 
 
-; 180 scan lines of snow, 16 scan lines per group of 4 missiles, so there
-; are 11 full groups plus a quarter group. At any one time, there are 45
-; snowflakes on screen.
+; 176 scan lines of snow, 16 scan lines per group of 4 missiles, so there
+; are 11 full groups. At any one time, there are 44 snowflakes on screen.
 xpos_storage = jm_pmbase_p2
 id_storage = jm_pmbase_p3
 
 ; local constants
-top_vcount = 10
 bot_vcount = 100
-top_mmem = 20
+top_mmem = 24
 bot_mmem = 200
 
 ; local vars
@@ -147,9 +145,6 @@ gameloop
         cmp #$00
         beq ?glexit
 
-;        jsr gamelogic   ; do level-specific game logic
-
-
 ?gldone lda jmstatus
 ?gl2    cmp #$08
         bcc ?gl1
@@ -159,35 +154,15 @@ gameloop
         jmp ls_jmp_out_of_lives
 ?glexit jmp (ls_level_complete_ptr)
 
-        rts
-; level logic goes here. This is run between the main game screen scan lines,
-; once it's outside those lines it returns to the main game loop where normal
-; level processing resumes, checking for lives lost, etc.
-gamelogic
-        ; 1st 4 snowflakes hpos is set in VBI, that's the first 8 scan lines
-        ; equiv to 4 vcount.
-        lda vcount
-?1      cmp vcount
-        beq ?1
-        cmp #top_vcount+4
-        bcc ?done
-        cmp #bot_vcount
-        bcs ?done
-
-        ; ok, within region that vcount is going to alter missile positions
-        asl a
-        tay
-        lda id_storage,y
-        tax
-        lda xpos_storage,y
-        sta hposm0,x
-        jmp gamelogic
-?done   rts
 
 
 levelinit
         ;jsr dliinit
         jsr missileinit
+        lda #100
+        sta hposp2
+        lda #108
+        sta hposp3
         rts
 
 
@@ -241,7 +216,8 @@ custom_dli
 ?exit   rts
 
 
-dlirestore
+; restore original display list and DLI
+dlicleanup
         lda rtclok+2
 ?1      cmp rtclok+2    ; wait till next tick, indicating VBI has just happened
         bne ?1
@@ -256,6 +232,11 @@ dlirestore
         dey
         bpl ?11
 
+        lda #$65        ; restore default gameplay DLI
+        sta vdslst
+        lda #$3c
+        sta vdslst+1
+
         ; don't know how long this has taken, so do the wait thing again
         lda rtclok+2
 ?2      cmp rtclok+2
@@ -265,48 +246,50 @@ dlirestore
         rts
 
 
-
+dliscratch .byte 0
 dli
         pha
         lda vcount
         cmp #bot_vcount
         bcc ?1
         jmp $3c66       ; jump into normal DLI one instruction after PHA
-?1      tya
+?1      sta colbak
+        tya
         pha
         txa
         pha
+        lda vcount
         asl a
         tay
-        ; position 4 missiles (next 16 scan lines)
-        lda id_storage,y
-        tax
-        lda xpos_storage,y
-        sta hposm0,x
-        iny
-        iny
-        lda id_storage,y
-        tax
-        lda xpos_storage,y
-        sta hposm0,x
-        iny
-        iny
-        lda id_storage,y
-        tax
-        lda xpos_storage,y
-        sta hposm0,x
-        iny
-        iny
-        lda id_storage,y
-        tax
-        lda xpos_storage,y
-        sta hposm0,x
+
+        jsr next12
+
         pla
         tax
         pla
         tay
         pla
         rti
+
+
+; Set the next 12 scanline positions of missiles, using the Y register
+; as the scan line index value.
+next12
+        ; loop 12 scan lines, setting horizontal positions for the 2 visible
+        ; missiles in each 8 scan line group PLUS the first missile in the next
+        ; 8 scan line group. This takes care of flickering at DLI borders
+        lda #11
+nextalt sta dliscratch
+
+?loop
+        lda id_storage,y
+        tax
+        lda xpos_storage,y
+        sta hposm0,x
+        iny
+        dec dliscratch
+        bpl ?loop
+        rts
 
 
 missileinit
@@ -401,13 +384,7 @@ vbi1
         jsr new_snow
 
 ?1      ldy #top_mmem   ; restore positions for top of next frame
-?2      lda id_storage,y
-        tax
-        lda xpos_storage,y
-        sta hposm0,x
-        iny
-        cpy #top_mmem+16
-        bcc ?2
+        jsr next12
 
         jmp $311b
 
@@ -432,4 +409,4 @@ snow3x .byte $30+4
 loop_count .byte 8
 next_snowflake .byte 0
 snowflakes .byte $02,$08,$20,$80
-dli_line_list .byte 0,8,16,24,32,40,48,56,64,72,80
+dli_line_list .byte 0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,$ff
